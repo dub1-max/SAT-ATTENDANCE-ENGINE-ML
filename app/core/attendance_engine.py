@@ -36,12 +36,13 @@ class AttendanceEngine:
         source: str = "camera-1",
         image_path: Optional[str] = None,
         now: Optional[datetime] = None,
+        mode: str = "check_in",
     ) -> Tuple[str, dict]:
         """
-        Apply business rules to a single recognition event.
+        Apply business rules to a single recognition event based on mode.
 
         Returns (event_type, payload) where event_type is one of:
-          "unknown", "check_in", "check_out", "duplicate_ignored", "inactive_employee"
+          "unknown", "check_in", "check_out", "duplicate_ignored", "inactive_employee", "checkout_failed_no_checkin"
         """
         now = now or datetime.now()
         today = now.date()
@@ -64,37 +65,24 @@ class AttendanceEngine:
 
         record = Attendance.query.filter_by(employee_id=employee_id, date=today).first()
 
-        # ---- No record yet today -> CHECK-IN ------------------------------
-        if record is None:
-            status = self._late_status(now, today)
-            record = Attendance(
-                employee_id=employee_id,
-                date=today,
-                check_in_time=now,
-                status=status,
-                check_in_confidence=confidence,
-                source=source,
-            )
-            db.session.add(record)
-            db.session.add(RecognitionLog(timestamp=now, employee_id=employee_id, event_type="recognized",
-                                           confidence=confidence, image_path=image_path))
-            db.session.commit()
-            return "check_in", {"attendance": record.to_dict(), "status": status}
-
-        # ---- Already checked in: decide duplicate vs. check-out -----------
-        minutes_since_checkin = (now - record.check_in_time).total_seconds() / 60.0
-
-        if record.check_out_time is None:
-            if minutes_since_checkin < self.cfg.MIN_MINUTES_BEFORE_CHECKOUT:
-                # Too soon to be a deliberate check-out -> treat as duplicate
+        # ---- Process based on mode ----------------------------------------
+        if mode == "check_out":
+            if record is None:
+                # Cannot check out if hasn't checked in
                 db.session.add(RecognitionLog(timestamp=now, employee_id=employee_id,
                                                event_type="duplicate_ignored", confidence=confidence,
                                                image_path=image_path))
                 db.session.commit()
-                return "duplicate_ignored", {
-                    "message": f"Already checked in at {record.check_in_time.strftime('%H:%M:%S')}",
-                    "minutes_since_checkin": round(minutes_since_checkin, 1),
-                }
+                return "checkout_failed_no_checkin", {"message": "Please Check-in first before checking out."}
+            
+            if record.check_out_time is not None:
+                # Already checked out
+                db.session.add(RecognitionLog(timestamp=now, employee_id=employee_id,
+                                               event_type="duplicate_ignored", confidence=confidence,
+                                               image_path=image_path))
+                db.session.commit()
+                return "duplicate_ignored", {"message": "Already checked out for today"}
+            
             # Eligible check-out
             record.check_out_time = now
             record.check_out_confidence = confidence
@@ -102,21 +90,32 @@ class AttendanceEngine:
                                            confidence=confidence, image_path=image_path))
             db.session.commit()
             return "check_out", {"attendance": record.to_dict()}
-
-        # ---- Already checked in AND out -> duplicate for the day ----------
-        minutes_since_checkout = (now - record.check_out_time).total_seconds() / 60.0
-        if minutes_since_checkout < self.cfg.DUPLICATE_COOLDOWN_MINUTES:
-            db.session.add(RecognitionLog(timestamp=now, employee_id=employee_id,
-                                           event_type="duplicate_ignored", confidence=confidence,
-                                           image_path=image_path))
-            db.session.commit()
-            return "duplicate_ignored", {"message": "Attendance already completed for today"}
-
-        # Recognized again well after checkout: log only, don't mutate attendance
-        db.session.add(RecognitionLog(timestamp=now, employee_id=employee_id, event_type="recognized",
-                                       confidence=confidence, image_path=image_path))
-        db.session.commit()
-        return "duplicate_ignored", {"message": "Attendance already completed for today"}
+        
+        else: # mode == "check_in"
+            if record is None:
+                status = self._late_status(now, today)
+                record = Attendance(
+                    employee_id=employee_id,
+                    date=today,
+                    check_in_time=now,
+                    status=status,
+                    check_in_confidence=confidence,
+                    source=source,
+                )
+                db.session.add(record)
+                db.session.add(RecognitionLog(timestamp=now, employee_id=employee_id, event_type="recognized",
+                                               confidence=confidence, image_path=image_path))
+                db.session.commit()
+                return "check_in", {"attendance": record.to_dict(), "status": status}
+            else:
+                # Already checked in today
+                db.session.add(RecognitionLog(timestamp=now, employee_id=employee_id,
+                                               event_type="duplicate_ignored", confidence=confidence,
+                                               image_path=image_path))
+                db.session.commit()
+                return "duplicate_ignored", {
+                    "message": f"Already checked in at {record.check_in_time.strftime('%H:%M:%S')}",
+                }
 
     # ------------------------------------------------------------------ #
     def _late_status(self, now: datetime, today: date) -> str:

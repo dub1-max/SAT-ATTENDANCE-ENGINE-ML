@@ -24,6 +24,10 @@ class Employee(db.Model):
     designation = db.Column(db.String(80), nullable=True)
     email = db.Column(db.String(120), nullable=True)
     phone = db.Column(db.String(20), nullable=True)
+    contract_start_date = db.Column(db.Date, nullable=True)
+    contract_end_date = db.Column(db.Date, nullable=True)
+    profile_picture = db.Column(db.String(255), nullable=True)
+    date_of_birth = db.Column(db.Date, nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     face_samples_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.now)
@@ -40,6 +44,10 @@ class Employee(db.Model):
             "designation": self.designation,
             "email": self.email,
             "phone": self.phone,
+            "contract_start_date": self.contract_start_date.isoformat() if self.contract_start_date else None,
+            "contract_end_date": self.contract_end_date.isoformat() if self.contract_end_date else None,
+            "profile_picture": self.profile_picture,
+            "date_of_birth": self.date_of_birth.isoformat() if self.date_of_birth else None,
             "is_active": self.is_active,
             "face_samples_count": self.face_samples_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,

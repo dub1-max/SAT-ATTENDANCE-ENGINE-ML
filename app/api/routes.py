@@ -83,6 +83,10 @@ def create_employee():
         designation=data.get("designation"),
         email=data.get("email"),
         phone=data.get("phone"),
+        contract_start_date=datetime.strptime(data["contract_start_date"], "%Y-%m-%d").date() if data.get("contract_start_date") else None,
+        contract_end_date=datetime.strptime(data["contract_end_date"], "%Y-%m-%d").date() if data.get("contract_end_date") else None,
+        profile_picture=data.get("profile_picture"),
+        date_of_birth=datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date() if data.get("date_of_birth") else None,
     )
     db.session.add(employee)
     db.session.flush()  # get employee.id before logging
@@ -116,12 +120,37 @@ def get_employee(employee_id):
 @api_bp.route("/employees/<int:employee_id>", methods=["PUT"])
 def update_employee(employee_id):
     employee = Employee.query.get_or_404(employee_id)
-    data = request.get_json(force=True)
+    
+    if request.is_json:
+        data = request.get_json(force=True)
+    else:
+        data = dict(request.form)
+        
     changed_fields = []
-    for field in ["name", "department", "designation", "email", "phone"]:
-        if field in data and data[field] != getattr(employee, field):
-            setattr(employee, field, data[field])
-            changed_fields.append(field)
+    
+    if "profile_picture" in request.files:
+        from werkzeug.utils import secure_filename
+        import os
+        from flask import current_app
+        file = request.files["profile_picture"]
+        if file.filename != "":
+            filename = secure_filename(f"emp_{employee.id}_{file.filename}")
+            profiles_dir = os.path.join(current_app.root_path, "..", "static", "profiles")
+            os.makedirs(profiles_dir, exist_ok=True)
+            file.save(os.path.join(profiles_dir, filename))
+            data["profile_picture"] = f"/static/profiles/{filename}"
+    
+    date_fields = ["date_of_birth", "contract_start_date", "contract_end_date"]
+    for field in ["name", "department", "designation", "email", "phone", "profile_picture"] + date_fields:
+        if field in data:
+            val = data[field]
+            if field in date_fields:
+                val = datetime.strptime(val, "%Y-%m-%d").date() if val else None
+            
+            if getattr(employee, field) != val:
+                setattr(employee, field, val)
+                changed_fields.append(field)
+    
     db.session.flush()
     if changed_fields:
         _log_admin_action("updated", employee=employee, details=f"Changed: {', '.join(changed_fields)}")
@@ -297,12 +326,14 @@ def recognize():
             snapshot_dir = Config.UNKNOWN_LOG_DIR
         snapshot_path = save_snapshot(frame, snapshot_dir)
 
+        mode = data.get("mode", "check_in")
         event_type, payload = attendance_engine.process_event(
             employee_id=r.employee_id,
             confidence=r.confidence,
             source=source,
             image_path=snapshot_path,
             now=now,
+            mode=mode,
         )
         output.append({
             "box": r.box,

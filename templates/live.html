@@ -24,6 +24,10 @@
 </div>
 
 <div style="max-width:640px; margin: 16px auto 0; display:flex; justify-content:center; gap:10px;">
+  <select id="capture-mode" class="btn btn-secondary" style="padding: 0 16px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; font-family: inherit; font-size: 14px;">
+    <option value="check_in">Mode: Check-In</option>
+    <option value="check_out">Mode: Check-Out</option>
+  </select>
   <button id="toggle-btn" class="btn btn-primary">Start Recognition</button>
 </div>
 
@@ -95,6 +99,15 @@ function maybeShowBanner(entry) {
       title: "Unrecognized Face",
       subtitle: "This person is not enrolled",
     });
+  } else if (entry.event === "checkout_failed_no_checkin") {
+    const key = `checkoutfail-${entry.employee_id}`;
+    if (lastBannerKey === key) return;
+    lastBannerKey = key;
+    showBanner({
+      kind: "warn",
+      title: "Check-out Failed",
+      subtitle: entry.detail.message,
+    });
   } else {
     // duplicate_ignored / inactive_employee: no banner, just reset the
     // dedupe key so a genuinely new event for this person can show again
@@ -148,6 +161,8 @@ function prependFeedItem(entry, employeeName) {
     text = `<strong>${employeeName || ("ID " + entry.employee_id)}</strong> checked out`;
   } else if (entry.event === "duplicate_ignored") {
     text = `<strong>${employeeName || ("ID " + entry.employee_id)}</strong> — duplicate ignored`;
+  } else if (entry.event === "checkout_failed_no_checkin") {
+    text = `<strong>${employeeName || ("ID " + entry.employee_id)}</strong> — ${entry.detail.message}`;
   } else {
     text = `<strong>${employeeName || ("ID " + entry.employee_id)}</strong> — ${entry.event}`;
   }
@@ -161,7 +176,7 @@ async function recognizeLoop() {
   try {
     const result = await api("/recognize", {
       method: "POST",
-      body: JSON.stringify({ image: grabFrame(), source: "web-camera" }),
+      body: JSON.stringify({ image: grabFrame(), source: "web-camera", mode: document.getElementById('capture-mode').value }),
     });
     drawBoxes(result.results);
     result.results.forEach(r => {

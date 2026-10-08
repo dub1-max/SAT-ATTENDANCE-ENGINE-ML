@@ -9,7 +9,7 @@ Flask-CORS==4.0.1
 
 # Computer Vision / ML
 opencv-contrib-python-headless==4.10.0.84   # includes cv2.face (LBPH)
-numpy==1.26.4
+numpy>=1.26.4
 Pillow==10.4.0
 
 # Utilities
