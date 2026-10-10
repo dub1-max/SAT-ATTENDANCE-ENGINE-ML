@@ -29,18 +29,33 @@ class Config:
     # ------------------------------------------------------------------ #
     # Database
     # ------------------------------------------------------------------ #
-    DB_PATH = os.path.join(BASE_DIR, "database", "attendance.db")
+    # If running on Vercel (serverless), use /tmp for all file storage
+    # since the rest of the filesystem is read-only.
+    if os.environ.get("VERCEL") == "1":
+        STORAGE_BASE = "/tmp"
+    else:
+        STORAGE_BASE = os.path.join(BASE_DIR, "database")
+
+    # ------------------------------------------------------------------ #
+    # Database
+    # ------------------------------------------------------------------ #
+    DB_PATH = os.path.join(STORAGE_BASE, "attendance.db")
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{DB_PATH}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # ------------------------------------------------------------------ #
     # Storage paths
     # ------------------------------------------------------------------ #
-    DATASET_DIR = os.path.join(BASE_DIR, "database", "dataset")        # raw enrolment images per employee
-    MODEL_PATH = os.path.join(BASE_DIR, "database", "lbph_model.yml")  # trained recognizer
-    LABELS_PATH = os.path.join(BASE_DIR, "database", "labels.json")    # label <-> employee_id map
-    UNKNOWN_LOG_DIR = os.path.join(BASE_DIR, "static", "captures", "unknown")
-    RECOGNIZED_LOG_DIR = os.path.join(BASE_DIR, "static", "captures", "recognized")
+    DATASET_DIR = os.path.join(STORAGE_BASE, "dataset")        # raw enrolment images per employee
+    MODEL_PATH = os.path.join(STORAGE_BASE, "lbph_model.yml")  # trained recognizer
+    LABELS_PATH = os.path.join(STORAGE_BASE, "labels.json")    # label <-> employee_id map
+    
+    if os.environ.get("VERCEL") == "1":
+        UNKNOWN_LOG_DIR = os.path.join("/tmp", "static", "captures", "unknown")
+        RECOGNIZED_LOG_DIR = os.path.join("/tmp", "static", "captures", "recognized")
+    else:
+        UNKNOWN_LOG_DIR = os.path.join(BASE_DIR, "static", "captures", "unknown")
+        RECOGNIZED_LOG_DIR = os.path.join(BASE_DIR, "static", "captures", "recognized")
 
     # ------------------------------------------------------------------ #
     # Face detection (Haar Cascade — fast, dependency-free, CPU friendly)

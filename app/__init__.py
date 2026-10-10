@@ -28,7 +28,12 @@ def create_app(config_class=Config):
                 {'WWW-Authenticate': 'Basic realm="Login Required"'}
             )
 
+    import os
     with app.app_context():
+        os.makedirs(os.path.dirname(app.config["DB_PATH"]), exist_ok=True)
+        os.makedirs(app.config["DATASET_DIR"], exist_ok=True)
+        os.makedirs(app.config["UNKNOWN_LOG_DIR"], exist_ok=True)
+        os.makedirs(app.config["RECOGNIZED_LOG_DIR"], exist_ok=True)
         db.create_all()
 
     from app.api.routes import api_bp
