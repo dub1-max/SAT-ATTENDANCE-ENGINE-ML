@@ -1,6 +1,6 @@
 """Application factory."""
 
-from flask import Flask
+from flask import Flask, request, Response
 from flask_cors import CORS
 
 from app.config import Config
@@ -17,6 +17,16 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     CORS(app)
+
+    @app.before_request
+    def require_auth():
+        auth = request.authorization
+        if not auth or not (auth.username == 'SATCORP1' and auth.password == 'SAT-ATT-SYS-UAE'):
+            return Response(
+                'Could not verify your access level for that URL.\n'
+                'You have to login with proper credentials', 401,
+                {'WWW-Authenticate': 'Basic realm="Login Required"'}
+            )
 
     with app.app_context():
         db.create_all()
